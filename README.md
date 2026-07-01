@@ -2,6 +2,8 @@
 
 APEX-CDN is a simulated Multi-Region, Fault-Tolerant URL & Content Delivery System built in Go. It demonstrates distributed systems principles like geographical load balancing (GSLB), multi-tiered failover caching, eventual consistency, and replication lag partitioning.
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/moulionmission/multi-region-cdn)
+
 👉 **[Live Demo Deployment Guide](#-cloud-deployment-blueprint-render)**
 
 ---
