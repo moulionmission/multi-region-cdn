@@ -19,7 +19,7 @@ The project directory (`/Users/b.v.ramana/Desktop/multi-region-cdn`) contains a 
    - Runs independently in three simulated locations: `us-east` (port `8081`), `us-west` (port `8082`), and `eu-west` (port `8083`).
    - Resolves requests using local caches and read replicas, with a fallback connection to the primary database.
    - Exposes APIs to simulate/clear software failures (`POST /simulate/fail` and `/simulate/reset`).
-3. **Local Mesh Runner (`cmd/simulator/main.go`)**:
+3. **Local Mesh Runner (`main.go`)**:
    - Launches all four Go processes (3 Apps + 1 Router) concurrently in a single terminal session, setting environment variables, piping logs, and capturing Ctrl+C signals for a clean teardown.
 
 ### B. The Interactive Console Layer (HTML/CSS/JS)

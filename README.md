@@ -51,7 +51,7 @@ Reads (`GET /:code`) are served by local regional nodes. If a component fails, t
 ### 1. Zero-Dependency Simulator (Recommended)
 Run the entire cluster (3 App instances + 1 Global Router) locally in-memory:
 ```bash
-go run cmd/simulator/main.go
+go run main.go
 ```
 Open the visual telemetry dashboard in your browser:
 👉 **[http://localhost:8080/dashboard/](http://localhost:8080/dashboard/)**

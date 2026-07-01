@@ -22,7 +22,7 @@ func main() {
 
 	// Verify cmd files exist
 	if _, err := os.Stat("cmd/app/main.go"); os.IsNotExist(err) {
-		log.Fatal("Could not find 'cmd/app/main.go'. Please run the simulator from the project root directory /Users/b.v.ramana/Desktop/multi-region-cdn")
+		log.Fatal("Could not find 'cmd/app/main.go'. Please run the simulator from the project root directory.")
 	}
 
 	processes := []*Subprocess{
@@ -98,10 +98,8 @@ func main() {
 	for _, p := range processes {
 		if p.Cmd.Process != nil {
 			log.Printf("[Simulator] Stopping %s...", p.Name)
-			// Send SIGINT
 			p.Cmd.Process.Signal(syscall.SIGINT)
 			
-			// Wait for exit, force kill if hangs after 2s
 			done := make(chan error, 1)
 			go func() {
 				done <- p.Cmd.Wait()
@@ -145,7 +143,6 @@ func startSubprocess(p *Subprocess) error {
 		return err
 	}
 
-	// Stream logs in separate goroutines
 	go streamLogs(fmt.Sprintf("[%s STDOUT]", p.Name), stdout)
 	go streamLogs(fmt.Sprintf("[%s STDERR]", p.Name), stderr)
 
@@ -155,7 +152,6 @@ func startSubprocess(p *Subprocess) error {
 func streamLogs(prefix string, reader io.Reader) {
 	scanner := bufio.NewScanner(reader)
 	for scanner.Scan() {
-		// Log stdout/stderr of subprocesses with custom prefix
 		log.Printf("%s %s", prefix, scanner.Text())
 	}
 }
