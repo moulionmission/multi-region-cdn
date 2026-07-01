@@ -2,6 +2,8 @@
 /app
 /router
 /simulator
+/app_server
+/router_server
 /cmd/simulator/simulator
 /cmd/app/app
 /cmd/router/router

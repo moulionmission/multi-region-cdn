@@ -20,16 +20,22 @@ type Subprocess struct {
 func main() {
 	log.Println("[Simulator] Initializing APEX-CDN Multi-Region Mock Mesh...")
 
-	// Verify cmd files exist
-	if _, err := os.Stat("cmd/app/main.go"); os.IsNotExist(err) {
-		log.Fatal("Could not find 'cmd/app/main.go'. Please run the simulator from the project root directory.")
+	// Verify pre-compiled binaries exist
+	if _, err := os.Stat("app_server"); os.IsNotExist(err) {
+		log.Println("[Simulator] Warning: 'app_server' binary not found. Falling back to Go source compile...")
+		// We fallback to compiling locally if binaries aren't built, ensuring local developer friendliness
+		compileBinary("cmd/app/main.go", "app_server")
+	}
+	if _, err := os.Stat("router_server"); os.IsNotExist(err) {
+		log.Println("[Simulator] Warning: 'router_server' binary not found. Falling back to Go source compile...")
+		compileBinary("cmd/router/main.go", "router_server")
 	}
 
 	processes := []*Subprocess{
 		// 1. US-East Regional Server
 		{
 			Name: "US-EAST (Primary)",
-			Cmd: createCmd("cmd/app/main.go", map[string]string{
+			Cmd: createCmd("./app_server", map[string]string{
 				"REGION":     "us-east",
 				"PORT":       "8081",
 				"IS_PRIMARY": "true",
@@ -40,7 +46,7 @@ func main() {
 		// 2. US-West Regional Server
 		{
 			Name: "US-WEST (Replica)",
-			Cmd: createCmd("cmd/app/main.go", map[string]string{
+			Cmd: createCmd("./app_server", map[string]string{
 				"REGION":     "us-west",
 				"PORT":       "8082",
 				"IS_PRIMARY": "false",
@@ -51,7 +57,7 @@ func main() {
 		// 3. EU-West Regional Server
 		{
 			Name: "EU-WEST (Replica)",
-			Cmd: createCmd("cmd/app/main.go", map[string]string{
+			Cmd: createCmd("./app_server", map[string]string{
 				"REGION":     "eu-west",
 				"PORT":       "8083",
 				"IS_PRIMARY": "false",
@@ -62,7 +68,7 @@ func main() {
 		// 4. Global Load Balancer Router
 		{
 			Name: "GLOBAL ROUTER",
-			Cmd: createCmd("cmd/router/main.go", map[string]string{
+			Cmd: createCmd("./router_server", map[string]string{
 				"PORT":        "8080",
 				"US_EAST_URL": "http://localhost:8081",
 				"US_WEST_URL": "http://localhost:8082",
@@ -118,8 +124,18 @@ func main() {
 	log.Println("[Simulator] All services stopped. Goodbye!")
 }
 
-func createCmd(sourcePath string, env map[string]string) *exec.Cmd {
-	cmd := exec.Command("go", "run", sourcePath)
+func compileBinary(source, output string) {
+	cmd := exec.Command("go", "build", "-o", output, source)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		log.Fatalf("[Simulator] Failed to compile fallback binary for %s: %v", source, err)
+	}
+	log.Printf("[Simulator] Fallback compilation of %s completed successfully.", output)
+}
+
+func createCmd(binaryPath string, env map[string]string) *exec.Cmd {
+	cmd := exec.Command(binaryPath)
 	
 	// Inherit environment variables
 	cmd.Env = os.Environ()

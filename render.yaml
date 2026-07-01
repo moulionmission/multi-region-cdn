@@ -2,8 +2,8 @@ services:
   - type: web
     name: apex-cdn-simulator
     env: go
-    buildCommand: go build -o app main.go
-    startCommand: ./app
+    buildCommand: go build -o app_server cmd/app/main.go && go build -o router_server cmd/router/main.go && go build -o simulator main.go
+    startCommand: ./simulator
     envVars:
       - key: PORT
         value: 8080
