@@ -1,0 +1,21 @@
+# Binaries
+/app
+/router
+/simulator
+/cmd/simulator/simulator
+/cmd/app/app
+/cmd/router/router
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Logs
+*.log
+
+# OS metadata
+.DS_Store
+.DS_Store?
+*~
+lh.html
