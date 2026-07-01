@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>APEX-CDN // Global Multi-Region Console</title>
+    <!-- Google Fonts: Orbitron & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@600;800;900&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="glow-bg"></div>
+    
+    <div class="app-container">
+        <!-- Header -->
+        <header>
+            <div class="header-logo">
+                <div class="scanner-line"></div>
+                <span class="logo-accent">APEX</span><span>// CDN</span>
+            </div>
+            <div class="system-status">
+                <span class="pulse-indicator healthy" id="router-pulse"></span>
+                <span class="status-label">GLOBAL ROUTER:</span>
+                <span class="status-value highlight" id="router-status">ONLINE (PORT 8080)</span>
+            </div>
+            <div class="header-actions">
+                <button id="btn-reset" class="btn btn-danger-outline">
+                    <span class="icon">↺</span> RESET SIMULATION
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Workspace -->
+        <main class="dashboard-grid">
+            <!-- Simulated Map Topology -->
+            <section class="panel map-panel col-span-3">
+                <div class="panel-header">
+                    <h2><span class="text-gradient">SYSTEM TOPOLOGY</span> // MULTI-REGION DISTRIBUTION</h2>
+                    <span class="panel-subtitle">Visual traffic routing & replication flow</span>
+                </div>
+                <div class="topology-container">
+                    <!-- Client Console -->
+                    <div class="topology-node client-node" id="node-client">
+                        <div class="node-icon">💻</div>
+                        <div class="node-label">Client Browser</div>
+                        <div class="node-sub">Dashboard Operator</div>
+                    </div>
+
+                    <!-- Global Router -->
+                    <div class="topology-node router-node" id="node-router">
+                        <div class="node-icon">🌐</div>
+                        <div class="node-label">Global Router</div>
+                        <div class="node-sub">GSLB Load Balancer</div>
+                    </div>
+
+                    <!-- Region: US-East -->
+                    <div class="region-card us-east" id="card-us-east">
+                        <div class="region-header">
+                            <span class="region-name">🇺🇸 US-EAST</span>
+                            <span class="badge badge-primary">PRIMARY WRITE</span>
+                        </div>
+                        <div class="component-list">
+                            <div class="component-item" id="comp-us-east-app">
+                                <span class="comp-label">App Server</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="us-east" data-comp="all">KILL</button>
+                            </div>
+                            <div class="component-item" id="comp-us-east-redis">
+                                <span class="comp-label">Redis Cache</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="us-east" data-comp="redis">KILL</button>
+                            </div>
+                            <div class="component-item" id="comp-us-east-db">
+                                <span class="comp-label">Postgres Primary</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="us-east" data-comp="primary_db">KILL</button>
+                            </div>
+                        </div>
+                        <div class="region-metrics">
+                            <div>Requests: <span id="metric-us-east-req">0</span></div>
+                            <div>Cache Hits: <span id="metric-us-east-ch">0</span></div>
+                            <div>Replica Hits: <span id="metric-us-east-rh">0</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Region: US-West -->
+                    <div class="region-card us-west" id="card-us-west">
+                        <div class="region-header">
+                            <span class="region-name">🇺🇸 US-WEST</span>
+                            <span class="badge badge-secondary">READ REPLICA</span>
+                        </div>
+                        <div class="component-list">
+                            <div class="component-item" id="comp-us-west-app">
+                                <span class="comp-label">App Server</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="us-west" data-comp="all">KILL</button>
+                            </div>
+                            <div class="component-item" id="comp-us-west-redis">
+                                <span class="comp-label">Redis Cache</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="us-west" data-comp="redis">KILL</button>
+                            </div>
+                            <div class="component-item" id="comp-us-west-db">
+                                <span class="comp-label">Postgres Replica</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="us-west" data-comp="replica_db">KILL</button>
+                            </div>
+                        </div>
+                        <div class="region-metrics">
+                            <div>Requests: <span id="metric-us-west-req">0</span></div>
+                            <div>Cache Hits: <span id="metric-us-west-ch">0</span></div>
+                            <div>Replica Hits: <span id="metric-us-west-rh">0</span></div>
+                            <div>Fallback Reads: <span id="metric-us-west-fb">0</span></div>
+                        </div>
+                    </div>
+
+                    <!-- Region: EU-West -->
+                    <div class="region-card eu-west" id="card-eu-west">
+                        <div class="region-header">
+                            <span class="region-name">🇪🇺 EU-WEST</span>
+                            <span class="badge badge-secondary">READ REPLICA</span>
+                        </div>
+                        <div class="component-list">
+                            <div class="component-item" id="comp-eu-west-app">
+                                <span class="comp-label">App Server</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="eu-west" data-comp="all">KILL</button>
+                            </div>
+                            <div class="component-item" id="comp-eu-west-redis">
+                                <span class="comp-label">Redis Cache</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="eu-west" data-comp="redis">KILL</button>
+                            </div>
+                            <div class="component-item" id="comp-eu-west-db">
+                                <span class="comp-label">Postgres Replica</span>
+                                <span class="comp-status status-up">UP</span>
+                                <button class="btn-toggle-fail" data-region="eu-west" data-comp="replica_db">KILL</button>
+                            </div>
+                        </div>
+                        <div class="region-metrics">
+                            <div>Requests: <span id="metric-eu-west-req">0</span></div>
+                            <div>Cache Hits: <span id="metric-eu-west-ch">0</span></div>
+                            <div>Replica Hits: <span id="metric-eu-west-rh">0</span></div>
+                            <div>Fallback Reads: <span id="metric-eu-west-fb">0</span></div>
+                        </div>
+                    </div>
+
+                    <!-- SVG Canvas for Drawing Paths and Traffic Flows -->
+                    <svg class="topology-lines" id="topology-svg">
+                        <!-- Definitions for arrow markers and gradient paths -->
+                        <defs>
+                            <marker id="arrow" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 0 L 10 5 L 0 10 z" fill="#14b8a6" />
+                            </marker>
+                            <marker id="arrow-replication" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+                                <path d="M 0 0 L 10 5 L 0 10 z" fill="#f59e0b" />
+                            </marker>
+                        </defs>
+                        <!-- Dynamic connections drawn by JS -->
+                    </svg>
+                </div>
+            </section>
+
+            <!-- Control Console & Log Analyzer -->
+            <section class="panel control-panel col-span-1">
+                <div class="panel-header">
+                    <h2><span class="text-gradient">REQUEST GENERATOR</span></h2>
+                    <span class="panel-subtitle">Simulate client traffic with geo affinity</span>
+                </div>
+                
+                <div class="control-tabs">
+                    <button class="tab-btn active" id="tab-write">CREATE SHORT URL</button>
+                    <button class="tab-btn" id="tab-read">RESOLVE URL</button>
+                </div>
+
+                <!-- Write Panel -->
+                <div class="tab-content active" id="write-section">
+                    <form id="form-create-url" class="simulation-form">
+                        <div class="form-group">
+                            <label for="input-target-region">Client Region Location</label>
+                            <select id="input-target-region" class="form-control">
+                                <option value="us-west">🇺🇸 US-West (Silicon Valley)</option>
+                                <option value="us-east" selected>🇺🇸 US-East (Virginia)</option>
+                                <option value="eu-west">🇪🇺 EU-West (Ireland)</option>
+                            </select>
+                            <span class="form-help">Writes always route to US-East (Primary DB)</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="input-long-url">Target Long URL</label>
+                            <input type="url" id="input-long-url" value="https://google.com" placeholder="https://example.com" required class="form-control">
+                        </div>
+                        <div class="form-group">
+                            <label for="input-custom-code">Custom Short Code (Optional)</label>
+                            <input type="text" id="input-custom-code" placeholder="e.g. promo" class="form-control font-mono">
+                        </div>
+                        <button type="submit" class="btn btn-primary-solid btn-block">
+                            EXECUTE WRITE PROTOCOL
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Read Panel -->
+                <div class="tab-content" id="read-section">
+                    <form id="form-resolve-url" class="simulation-form">
+                        <div class="form-group">
+                            <label for="input-client-region">Client Region Location</label>
+                            <select id="input-client-region" class="form-control">
+                                <option value="us-west" selected>🇺🇸 US-West (Silicon Valley)</option>
+                                <option value="us-east">🇺🇸 US-East (Virginia)</option>
+                                <option value="eu-west">🇪🇺 EU-West (Ireland)</option>
+                            </select>
+                            <span class="form-help">Will try local cache, then replica, then fallback</span>
+                        </div>
+                        <div class="form-group">
+                            <label for="input-short-code">Short Code</label>
+                            <div class="input-with-button">
+                                <select id="select-active-codes" class="form-control font-mono">
+                                    <option value="" disabled selected>Select generated code...</option>
+                                </select>
+                                <input type="text" id="input-short-code" placeholder="Or type code..." class="form-control font-mono">
+                            </div>
+                        </div>
+                        <button type="submit" class="btn btn-accent-solid btn-block">
+                            RESOLVE CONTENT
+                        </button>
+                    </form>
+                </div>
+
+                <!-- Last Request Trace -->
+                <div class="trace-box" id="request-trace">
+                    <h3>LAST TRANSACTION ANALYTICS</h3>
+                    <div class="trace-metrics">
+                        <div class="trace-metric">
+                            <span class="label">Served By:</span>
+                            <span class="val font-mono" id="trace-served-by">-</span>
+                        </div>
+                        <div class="trace-metric">
+                            <span class="label">Failover:</span>
+                            <span class="val" id="trace-failover">-</span>
+                        </div>
+                        <div class="trace-metric">
+                            <span class="label">Read Path:</span>
+                            <span class="val" id="trace-path">-</span>
+                        </div>
+                        <div class="trace-metric">
+                            <span class="label">Net Latency:</span>
+                            <span class="val font-mono" id="trace-net-latency">-</span>
+                        </div>
+                        <div class="trace-metric">
+                            <span class="label">Total Duration:</span>
+                            <span class="val font-mono text-cyan" id="trace-duration">-</span>
+                        </div>
+                        <div class="trace-metric">
+                            <span class="label">Http Status:</span>
+                            <span class="val font-mono" id="trace-status">-</span>
+                        </div>
+                    </div>
+                    <div class="trace-output">
+                        <div class="output-title">Payload / Redirect URL:</div>
+                        <div class="output-body font-mono" id="trace-payload">-</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Logs / Terminal Output -->
+            <section class="panel terminal-panel col-span-2">
+                <div class="panel-header">
+                    <h2><span class="text-gradient">SYSTEM LOG STREAM</span></h2>
+                    <span class="panel-subtitle">Real-time replication and failover telemetry</span>
+                </div>
+                <div class="terminal-body font-mono" id="terminal-logs">
+                    <div class="log-line system-line">[SYSTEM] APEX-CDN console initialized. Health checking backend endpoints...</div>
+                </div>
+            </section>
+
+            <!-- CAP Theorem Sidebar -->
+            <section class="panel theory-panel col-span-3">
+                <div class="panel-header">
+                    <h2>📚 Distributed Systems & CAP Theorem Playground</h2>
+                </div>
+                <div class="theory-grid">
+                    <div class="theory-card">
+                        <h3>Consistency vs Availability (AP vs CP)</h3>
+                        <p><strong>Writes (CP system)</strong>: To prevent conflicting codes, writes are routed strictly to the primary DB in US-East. If US-East app server or database goes offline, writes fail. We prioritize Consistency over Availability for writes.</p>
+                        <p><strong>Reads (AP system)</strong>: Reads are served by regional replicas/caches. If the database replica or cache fails, the server falls back to cross-region reads. If a region goes completely dark, the router routes to the next closest region. We prioritize Availability for reads.</p>
+                    </div>
+                    <div class="theory-card">
+                        <h3>Eventual Consistency (Replica Lag)</h3>
+                        <p>Replication from the Primary DB (US-East) to Read Replicas is asynchronous to avoid stalling write requests. In Mock Mode, we simulate a replication delay (1.5s for US-West, 3.0s for EU-West).</p>
+                        <p><strong>Try this:</strong> Write a new URL and immediately request it from EU-West. You'll trigger a <strong>Primary DB Fallback</strong> or see eventual consistency in action as the replica catches up!</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
