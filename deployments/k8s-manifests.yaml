@@ -1,0 +1,523 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: us-east
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: us-west
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: eu-west
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: global-router
+
+# ==========================================
+# US-EAST: Primary Database & App Configs
+# ==========================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-init-config
+  namespace: us-east
+data:
+  init-primary.sql: |
+    CREATE TABLE IF NOT EXISTS urls (
+        code VARCHAR(50) PRIMARY KEY,
+        long_url TEXT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL
+    );
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'replicator') THEN
+            CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'repl_password';
+        END IF;
+    END $$;
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-primary
+  namespace: us-east
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-primary
+  template:
+    metadata:
+      labels:
+        app: db-primary
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        env:
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          value: postgres_pw
+        - name: POSTGRES_DB
+          value: cdn_db
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: init-script
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: init-script
+        configMap:
+          name: db-init-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-primary
+  namespace: us-east
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: db-primary
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-us-east
+  namespace: us-east
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-us-east
+  template:
+    metadata:
+      labels:
+        app: redis-us-east
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-us-east
+  namespace: us-east
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: redis-us-east
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-us-east
+  namespace: us-east
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-us-east
+  template:
+    metadata:
+      labels:
+        app: app-us-east
+    spec:
+      containers:
+      - name: app
+        image: apex-cdn-app:latest # local built image
+        imagePullPolicy: Never
+        env:
+        - name: REGION
+          value: us-east
+        - name: PORT
+          value: "8081"
+        - name: REDIS_ADDR
+          value: redis-us-east:6379
+        - name: REPLICA_DB_DSN
+          value: postgres://postgres:postgres_pw@db-primary:5432/cdn_db?sslmode=disable
+        - name: PRIMARY_DB_DSN
+          value: postgres://postgres:postgres_pw@db-primary:5432/cdn_db?sslmode=disable
+        - name: IS_PRIMARY
+          value: "true"
+        - name: MOCK_MODE
+          value: "false"
+        ports:
+        - containerPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-us-east
+  namespace: us-east
+spec:
+  ports:
+  - port: 8081
+  selector:
+    app: app-us-east
+
+# ==========================================
+# US-WEST: Standby Replica & App Configs
+# ==========================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-replica-script
+  namespace: us-west
+data:
+  entrypoint-replica.sh: |
+    #!/bin/bash
+    set -e
+    until pg_isready -h db-primary.us-east.svc.cluster.local -p 5432 -U postgres; do
+      sleep 1
+    done
+    if [ ! -s "$PGDATA/PG_VERSION" ]; then
+        rm -rf "$PGDATA"/*
+        PGPASSWORD=repl_password pg_basebackup -h db-primary.us-east.svc.cluster.local -D "$PGDATA" -U replicator -Fp -Xs -P -R
+    fi
+    chmod 700 "$PGDATA"
+    exec docker-entrypoint.sh postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-us-west
+  namespace: us-west
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-us-west
+  template:
+    metadata:
+      labels:
+        app: db-us-west
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        command: ["/bin/bash", "/usr/local/bin/entrypoint-replica.sh"]
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          value: postgres_pw
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: replica-script
+          mountPath: /usr/local/bin/entrypoint-replica.sh
+          subPath: entrypoint-replica.sh
+      volumes:
+      - name: replica-script
+        configMap:
+          name: db-replica-script
+          defaultMode: 0777
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-us-west
+  namespace: us-west
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: db-us-west
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-us-west
+  namespace: us-west
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-us-west
+  template:
+    metadata:
+      labels:
+        app: redis-us-west
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-us-west
+  namespace: us-west
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: redis-us-west
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-us-west
+  namespace: us-west
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-us-west
+  template:
+    metadata:
+      labels:
+        app: app-us-west
+    spec:
+      containers:
+      - name: app
+        image: apex-cdn-app:latest
+        imagePullPolicy: Never
+        env:
+        - name: REGION
+          value: us-west
+        - name: PORT
+          value: "8081"
+        - name: REDIS_ADDR
+          value: redis-us-west:6379
+        - name: REPLICA_DB_DSN
+          value: postgres://postgres:postgres_pw@db-us-west:5432/cdn_db?sslmode=disable
+        - name: PRIMARY_DB_DSN
+          value: postgres://postgres:postgres_pw@db-primary.us-east.svc.cluster.local:5432/cdn_db?sslmode=disable
+        - name: IS_PRIMARY
+          value: "false"
+        - name: MOCK_MODE
+          value: "false"
+        ports:
+        - containerPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-us-west
+  namespace: us-west
+spec:
+  ports:
+  - port: 8081
+  selector:
+    app: app-us-west
+
+# ==========================================
+# EU-WEST: Standby Replica & App Configs
+# ==========================================
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-replica-script-eu
+  namespace: eu-west
+data:
+  entrypoint-replica.sh: |
+    #!/bin/bash
+    set -e
+    until pg_isready -h db-primary.us-east.svc.cluster.local -p 5432 -U postgres; do
+      sleep 1
+    done
+    if [ ! -s "$PGDATA/PG_VERSION" ]; then
+        rm -rf "$PGDATA"/*
+        PGPASSWORD=repl_password pg_basebackup -h db-primary.us-east.svc.cluster.local -D "$PGDATA" -U replicator -Fp -Xs -P -R
+    fi
+    chmod 700 "$PGDATA"
+    exec docker-entrypoint.sh postgres
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: db-eu-west
+  namespace: eu-west
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: db-eu-west
+  template:
+    metadata:
+      labels:
+        app: db-eu-west
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14-alpine
+        command: ["/bin/bash", "/usr/local/bin/entrypoint-replica.sh"]
+        env:
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        - name: POSTGRES_USER
+          value: postgres
+        - name: POSTGRES_PASSWORD
+          value: postgres_pw
+        ports:
+        - containerPort: 5432
+        volumeMounts:
+        - name: replica-script
+          mountPath: /usr/local/bin/entrypoint-replica.sh
+          subPath: entrypoint-replica.sh
+      volumes:
+      - name: replica-script
+        configMap:
+          name: db-replica-script-eu
+          defaultMode: 0777
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: db-eu-west
+  namespace: eu-west
+spec:
+  ports:
+  - port: 5432
+  selector:
+    app: db-eu-west
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-eu-west
+  namespace: eu-west
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-eu-west
+  template:
+    metadata:
+      labels:
+        app: redis-eu-west
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-eu-west
+  namespace: eu-west
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: redis-eu-west
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: app-eu-west
+  namespace: eu-west
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: app-eu-west
+  template:
+    metadata:
+      labels:
+        app: app-eu-west
+    spec:
+      containers:
+      - name: app
+        image: apex-cdn-app:latest
+        imagePullPolicy: Never
+        env:
+        - name: REGION
+          value: eu-west
+        - name: PORT
+          value: "8081"
+        - name: REDIS_ADDR
+          value: redis-eu-west:6379
+        - name: REPLICA_DB_DSN
+          value: postgres://postgres:postgres_pw@db-eu-west:5432/cdn_db?sslmode=disable
+        - name: PRIMARY_DB_DSN
+          value: postgres://postgres:postgres_pw@db-primary.us-east.svc.cluster.local:5432/cdn_db?sslmode=disable
+        - name: IS_PRIMARY
+          value: "false"
+        - name: MOCK_MODE
+          value: "false"
+        ports:
+        - containerPort: 8081
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: app-eu-west
+  namespace: eu-west
+spec:
+  ports:
+  - port: 8081
+  selector:
+    app: app-eu-west
+
+# ==========================================
+# GLOBAL-ROUTER: Load Balancer & Proxy
+# ==========================================
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: router-global
+  namespace: global-router
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: router-global
+  template:
+    metadata:
+      labels:
+        app: router-global
+    spec:
+      containers:
+      - name: router
+        image: apex-cdn-router:latest # local built image
+        imagePullPolicy: Never
+        env:
+        - name: PORT
+          value: "8080"
+        - name: US_EAST_URL
+          value: http://app-us-east.us-east.svc.cluster.local:8081
+        - name: US_WEST_URL
+          value: http://app-us-west.us-west.svc.cluster.local:8081
+        - name: EU_WEST_URL
+          value: http://app-eu-west.eu-west.svc.cluster.local:8081
+        - name: WEB_DIR
+          value: ./web
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: router-global
+  namespace: global-router
+spec:
+  type: NodePort
+  ports:
+  - port: 8080
+    targetPort: 8080
+    nodePort: 30080
+  selector:
+    app: router-global

@@ -1,0 +1,154 @@
+version: '3.8'
+
+services:
+  # --- DATABASES (US-East Primary + US-West/EU-West Standby Replicas) ---
+  db-primary:
+    image: postgres:14-alpine
+    container_name: cdn-db-primary
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_pw
+      POSTGRES_DB: cdn_db
+    ports:
+      - "5431:5432"
+    volumes:
+      - ./db/init-primary.sql:/docker-entrypoint-initdb.d/init-primary.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d cdn_db"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  db-us-west:
+    image: postgres:14-alpine
+    container_name: cdn-db-us-west
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_pw
+    entrypoint: /usr/local/bin/entrypoint-replica.sh
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./db/entrypoint-replica.sh:/usr/local/bin/entrypoint-replica.sh
+    depends_on:
+      db-primary:
+        condition: service_healthy
+
+  db-eu-west:
+    image: postgres:14-alpine
+    container_name: cdn-db-eu-west
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_pw
+    entrypoint: /usr/local/bin/entrypoint-replica.sh
+    ports:
+      - "5433:5432"
+    volumes:
+      - ./db/entrypoint-replica.sh:/usr/local/bin/entrypoint-replica.sh
+    depends_on:
+      db-primary:
+        condition: service_healthy
+
+  # --- CACHES (Redis Local to Each Region) ---
+  redis-us-east:
+    image: redis:7-alpine
+    container_name: cdn-redis-us-east
+    ports:
+      - "6379:6379"
+
+  redis-us-west:
+    image: redis:7-alpine
+    container_name: cdn-redis-us-west
+    ports:
+      - "6380:6379"
+
+  redis-eu-west:
+    image: redis:7-alpine
+    container_name: cdn-redis-eu-west
+    ports:
+      - "6381:6379"
+
+  # --- REGIONAL APPLICATION SERVERS (Go Web Apps) ---
+  app-us-east:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    container_name: cdn-app-us-east
+    environment:
+      REGION: us-east
+      PORT: 8081
+      REDIS_ADDR: redis-us-east:6379
+      REPLICA_DB_DSN: postgres://postgres:postgres_pw@db-primary:5432/cdn_db?sslmode=disable
+      PRIMARY_DB_DSN: postgres://postgres:postgres_pw@db-primary:5432/cdn_db?sslmode=disable
+      IS_PRIMARY: "true"
+      MOCK_MODE: "false"
+    ports:
+      - "8081:8081"
+    depends_on:
+      db-primary:
+        condition: service_healthy
+      redis-us-east:
+        condition: service_started
+
+  app-us-west:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    container_name: cdn-app-us-west
+    environment:
+      REGION: us-west
+      PORT: 8081
+      REDIS_ADDR: redis-us-west:6379
+      REPLICA_DB_DSN: postgres://postgres:postgres_pw@db-us-west:5432/cdn_db?sslmode=disable
+      PRIMARY_DB_DSN: postgres://postgres:postgres_pw@db-primary:5432/cdn_db?sslmode=disable
+      IS_PRIMARY: "false"
+      MOCK_MODE: "false"
+    ports:
+      - "8082:8081"
+    depends_on:
+      db-us-west:
+        condition: service_started
+      redis-us-west:
+        condition: service_started
+
+  app-eu-west:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.app
+    container_name: cdn-app-eu-west
+    environment:
+      REGION: eu-west
+      PORT: 8081
+      REDIS_ADDR: redis-eu-west:6379
+      REPLICA_DB_DSN: postgres://postgres:postgres_pw@db-eu-west:5432/cdn_db?sslmode=disable
+      PRIMARY_DB_DSN: postgres://postgres:postgres_pw@db-primary:5432/cdn_db?sslmode=disable
+      IS_PRIMARY: "false"
+      MOCK_MODE: "false"
+    ports:
+      - "8083:8081"
+    depends_on:
+      db-eu-west:
+        condition: service_started
+      redis-eu-west:
+        condition: service_started
+
+  # --- GLOBAL ENTRY ROUTER (GSLB Reverse Proxy & Dashboard Host) ---
+  router-global:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.router
+    container_name: cdn-router-global
+    environment:
+      PORT: 8080
+      US_EAST_URL: http://app-us-east:8081
+      US_WEST_URL: http://app-us-west:8081
+      EU_WEST_URL: http://app-eu-west:8081
+      WEB_DIR: ./web
+    ports:
+      - "8080:8080"
+    depends_on:
+      - app-us-east
+      - app-us-west
+      - app-eu-west
