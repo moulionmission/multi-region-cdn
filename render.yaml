@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: apex-cdn-simulator
+    env: go
+    buildCommand: go build -o simulator cmd/simulator/main.go
+    startCommand: ./simulator
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: WEB_DIR
+        value: ./web
+      - key: MOCK_MODE
+        value: "true"
